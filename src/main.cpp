@@ -2,6 +2,8 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <LittleFS.h>
+
 #include "creds.hpp"
 #include "helpers.h"
 #include "screen.hpp"
@@ -111,37 +113,55 @@ String get_current_playing_album() {
 }
 
 
+
 void get_current_album_art() {
   HTTPClient http;
-  if (!current_album.id){
+  if (!current_album.id) {
     Serial.println("No current album");
+    return;
   }
+
   http.begin(current_album.image.url);
   int httpResponseCode = http.GET();
 
   if (httpResponseCode == HTTP_CODE_OK) {
     WiFiClient *stream = http.getStreamPtr();
+    File file = LittleFS.open("/album_art.jpg", FILE_WRITE);
+
+    if (!file) {
+      Serial.println("Failed to open file for writing");
+      return;
+    }
 
     uint8_t buffer[128] = { 0 };
     int len = stream->available();
-    int x = 0, y = 0;  // Starting coordinates for the image
 
     while (len > 0) {
       int c = stream->readBytes(buffer, sizeof(buffer));
-      // Process the buffer to display the image
-      // Assuming you have a function to draw JPEG from buffer:
-      drawJPEG(buffer, c, x, y);
+      file.write(buffer, c);
       len = stream->available();
     }
+
+    file.close();
+    Serial.println("Image saved successfully");
+  } else {
+    Serial.printf("Failed to get image, error: %s\n", http.errorToString(httpResponseCode).c_str());
   }
+
+  http.end();
 }
+
+
 
 
 
 void setup() {
   Serial.begin(9600);
 
-  
+  if(!LittleFS.begin()){
+        Serial.println("An Error has occurred while mounting LittleFS");
+        return;
+  }
 
   // Module configuration
   HUB75_I2S_CFG mxconfig(
@@ -168,7 +188,7 @@ void setup() {
   delay(2000);
 
   refresh_auth_token();
-  get_current_playing();
+  get_current_playing_album();
 }
 
 
